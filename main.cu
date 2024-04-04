@@ -1,4 +1,3 @@
-
 #include <assert.h>
 #include <stdio.h>
 #include <unistd.h>
@@ -112,10 +111,16 @@ int main(int argc, char**argv) {
         startTime(&timer);
         unsigned char *sequence1_d;
         unsigned char *sequence2_d;
-        int *scores_d;
+        int* scores_d;
+        int *ref_d;
+        int *ref_hv;
+        int *cur;
         cudaMalloc((void**) &sequence1_d, numSequences*SEQUENCE_LENGTH*sizeof(unsigned char));
         cudaMalloc((void**) &sequence2_d, numSequences*SEQUENCE_LENGTH*sizeof(unsigned char));
         cudaMalloc((void**) &scores_d, numSequences*sizeof(int));
+        cudaMalloc((void**) &ref_d, (SEQUENCE_LENGTH+1)*sizeof(int));
+        cudaMalloc((void**) &ref_hv, (SEQUENCE_LENGTH+1)*sizeof(int));
+        cudaMalloc((void**) &cur, (SEQUENCE_LENGTH+1)*sizeof(int));
         cudaDeviceSynchronize();
         stopTime(&timer);
         printElapsedTime(timer, "Allocation time");
@@ -136,7 +141,7 @@ int main(int argc, char**argv) {
 
             // Compute on GPU with version 0
             startTime(&timer);
-            nw_gpu0(sequence1_d, sequence2_d, scores_d, numSequences);
+            nw_gpu0(sequence1_d, sequence2_d, scores_d, numSequences, ref_d, ref_hv, cur);
             cudaDeviceSynchronize();
             stopTime(&timer);
             printElapsedTime(timer, "GPU kernel time (version 0)", GREEN);
@@ -249,4 +254,3 @@ int main(int argc, char**argv) {
     return 0;
 
 }
-
