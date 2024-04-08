@@ -5,7 +5,7 @@
 
 #define SEQUENCE_LENGTH 1024 
 
-_global_ void nw_kernel(unsigned char* sequence1_d, unsigned char* sequence2_d, int* scores_d, int numSequences, int* ref_d, int* ref_hv, int* cur) {
+__global__ void nw_kernel(unsigned char* sequence1_d, unsigned char* sequence2_d, int* scores_d, int numSequences, int* ref_d, int* ref_hv, int* cur) {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     if (tid < SEQUENCE_LENGTH) {
         if (threadIdx.x == 0) {
