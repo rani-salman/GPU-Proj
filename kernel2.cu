@@ -27,7 +27,7 @@ __global__ void nw_kernel1(unsigned char* sequence1_d, unsigned char* sequence2_
             ref_hv_shared[1] = INSERTION;
         }
 
-        int num_elements = (SEQUENCE_LENGTH + blockDim.x - 1) / blockDim.x; // Calculate the number of elements each thread should handle
+        int num_elements = (SEQUENCE_LENGTH + blockDim.x - 1) / blockDim.x;
 
         // Initialize multiple elements per thread
         for (int i = threadIdx.x * num_elements; i < min((threadIdx.x + 1) * num_elements, SEQUENCE_LENGTH); i++) {
