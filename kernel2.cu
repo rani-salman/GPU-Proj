@@ -59,7 +59,6 @@ __global__ void nw_kernel1(unsigned char* sequence1_d, unsigned char* sequence2_
             }
             __syncthreads();
 
-            // Update ref_d_shared and ref_hv_shared for multiple elements per thread
             for (int i = threadIdx.x * num_elements; i < min((threadIdx.x + 1) * num_elements, ad_length); i++) {
                 ref_d_shared[i] = ref_hv_shared[i];
                 ref_hv_shared[i] = cur_shared[i];
