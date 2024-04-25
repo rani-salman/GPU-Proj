@@ -5,7 +5,7 @@
 
 #define COARSENING_FACTOR 4
 
-__global__ void nw_kernel1(unsigned char* sequence1_d, unsigned char* sequence2_d, int* scores_d, int numSequences) {
+__global__ void nw_kernel2(unsigned char* sequence1_d, unsigned char* sequence2_d, int* scores_d, int numSequences) {
     int bid = blockIdx.x;
     if (bid < numSequences) {
         int seqIndex1 = bid * SEQUENCE_LENGTH;
@@ -71,7 +71,7 @@ void nw_gpu2(unsigned char* sequence1_d, unsigned char* sequence2_d, int* scores
 int threadsPerBlock = (SEQUENCE_LENGTH + COARSENING_FACTOR - 1) / COARSENING_FACTOR;
 int numBlocks = numSequences; 
 
-nw_kernel_coarsened<<<numBlocks, threadsPerBlock>>>(sequence1_d, sequence2_d, scores_d, numSequences);
+nw_kernel2<<<numBlocks, threadsPerBlock>>>(sequence1_d, sequence2_d, scores_d, numSequences);
 
 
 
