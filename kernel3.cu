@@ -1,83 +1,66 @@
-
 #include <assert.h>
 
 #include "common.h"
 #include "timer.h"
-#define COARSENING_FACTOR 4
-#define TILE_SIZE 32
 
-__global__ void nw_kernel3(unsigned char* sequence1_d, unsigned char* sequence2_d, int* scores_d, int numSequences) {
-    int bid = blockIdx.x;
-    if (bid < numSequences) {
-        int seqIndex1 = bid * SEQUENCE_LENGTH;
-        int seqIndex2 = bid * SEQUENCE_LENGTH;
+#define COARSENING_FACTOR 1  // Coarsening factor
 
-        __shared__ int ref_d_shared[SEQUENCE_LENGTH];
-        __shared__ int ref_hv_shared[SEQUENCE_LENGTH + 1]; 
-        __shared__ int cur_shared[TILE_SIZE * COARSENING_FACTOR];
+__global__ void kernel_nw3(unsigned char* sequence1, unsigned char* sequence2, int* scores_d, unsigned int numSequences)
+{
+    __shared__ int curr[SEQUENCE_LENGTH];
+    __shared__ int ref_b[SEQUENCE_LENGTH];
+    __shared__ int ref_hv[SEQUENCE_LENGTH];
 
-        if (threadIdx.x == 0) {
-            ref_d_shared[0] = 0;
-            ref_hv_shared[0] = INSERTION;
-            ref_hv_shared[1] = INSERTION;
-        }
+    int threadIteration = 1;
 
-        int num_elements = COARSENING_FACTOR; 
-        int num_tiles = (SEQUENCE_LENGTH + TILE_SIZE - 1) / TILE_SIZE;
+    for (unsigned int index = 0; index <= (2 * SEQUENCE_LENGTH) - 1; index += COARSENING_FACTOR) {
+        int column = threadIdx.x * COARSENING_FACTOR + 1;
+        int row = threadIteration; 
 
-        for (int t = 0; t < num_tiles; ++t) {
-            int start = t * TILE_SIZE;
-            int end = min(start + TILE_SIZE, SEQUENCE_LENGTH);
+        for (int i = 0; i < COARSENING_FACTOR; ++i) {
+            if (column + i <= min(index + 1, SEQUENCE_LENGTH) && row <= SEQUENCE_LENGTH && column + i <= SEQUENCE_LENGTH) {
+                ++threadIteration;
+                unsigned int seq1_idx = blockIdx.x * SEQUENCE_LENGTH + (column - 1) + i;
+                unsigned int seq2_idx = blockIdx.x * SEQUENCE_LENGTH + row - 1;
 
-            for (int i = threadIdx.x * num_elements; i < min((threadIdx.x + 1) * num_elements, end - start); i++) {
-                cur_shared[start - t * TILE_SIZE + i] = 0;
-            }
-            __syncthreads();
+                unsigned char seq1_val = sequence1[seq1_idx];
+                unsigned char seq2_val = sequence2[seq2_idx];
 
-            for (int d = 2; d < 2 * SEQUENCE_LENGTH; ++d) {
-                int ad_length;
-                if (d <= SEQUENCE_LENGTH) {
-                    ad_length = d - 1; 
-                } else {
-                    ad_length = 2 * SEQUENCE_LENGTH - d - 1;
-                }
-
-                for (int i = threadIdx.x * num_elements; i < min((threadIdx.x + 1) * num_elements, ad_length); i++) {
-                    int i1 = i < SEQUENCE_LENGTH ? i : SEQUENCE_LENGTH - 1;
-                    int i2 = i - i1;
-                    int score = (sequence1_d[seqIndex1 + i1] == sequence2_d[seqIndex2 + i2]) ? MATCH : MISMATCH;
-
-                    if (d < SEQUENCE_LENGTH) {
-                        cur_shared[start - t * TILE_SIZE + i] = max(ref_d_shared[i - 1] + score, max(ref_hv_shared[i - 1] + INSERTION, ref_hv_shared[i] + INSERTION));
-                    } else if (d == SEQUENCE_LENGTH) {
-                        cur_shared[start - t * TILE_SIZE + i] = max(ref_d_shared[i - 1] + score, max(ref_hv_shared[i] + INSERTION, ref_hv_shared[i + 1] + INSERTION));
-                    } else {
-                        cur_shared[start - t * TILE_SIZE + i] = max(ref_d_shared[i - 1] + score, max(ref_hv_shared[i] + INSERTION, ref_hv_shared[i + 1] + INSERTION));
-                    }
-                }
-                __syncthreads();
-
-                for (int i = threadIdx.x * num_elements; i < min((threadIdx.x + 1) * num_elements, ad_length); i++) {
-                    ref_d_shared[i] = ref_hv_shared[i];
-                    ref_hv_shared[i] = cur_shared[start - t * TILE_SIZE + i];
-                }
-                __syncthreads();
+                int top = (row == 1) ? (column + i) * DELETION : (ref_b[column + i - 1]);
+                int left = (column + i == 1) ? (row) * INSERTION : (ref_b[column + i - 2]);
+                int topleft = (row == 1) ? (column + i - 1) * DELETION : (column + i == 1) ? (row - 1) * INSERTION : (ref_hv[column + i - 2]);
+                int insertion = top + INSERTION;
+                int deletion = left + DELETION;
+                int match = topleft + ((seq2_val == seq1_val) ? MATCH : MISMATCH);
+                int max = (insertion > deletion) ? insertion : deletion;
+                max = (match > max) ? match : max;
+                curr[column + i - 1] = max; 
             }
         }
 
-        if (threadIdx.x == 0) {
-            scores_d[bid] = cur_shared[SEQUENCE_LENGTH - 1];
+        __syncthreads();
+
+        if (column <= min(SEQUENCE_LENGTH, index + 1)) {
+            for (int i = 0; i < COARSENING_FACTOR; ++i) {
+                ref_hv[column + i - 1] = ref_b[column + i - 1];
+                ref_b[column + i - 1] = curr[column + i - 1];
+            }
         }
+
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        scores_d[blockIdx.x] = curr[SEQUENCE_LENGTH - 1];
     }
 }
+
+
 void nw_gpu3(unsigned char* sequence1_d, unsigned char* sequence2_d, int* scores_d, unsigned int numSequences) {
 
-int threadsPerBlock = (SEQUENCE_LENGTH + COARSENING_FACTOR - 1) / COARSENING_FACTOR;
-int numBlocks = numSequences; 
+    const unsigned int numThreadsPerBlock = (SEQUENCE_LENGTH + COARSENING_FACTOR - 1) / COARSENING_FACTOR; 
+    const unsigned int numBlocks = numSequences;
 
-nw_kernel3<<<numBlocks, threadsPerBlock>>>(sequence1_d, sequence2_d, scores_d, numSequences);
-
-
-
-
+    cudaDeviceSynchronize();
+    kernel_nw3 <<< numBlocks, numThreadsPerBlock >>> (sequence1_d, sequence2_d, scores_d, numSequences);
 }
