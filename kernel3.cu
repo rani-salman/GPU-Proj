@@ -3,7 +3,7 @@
 #include "common.h"
 #include "timer.h"
 
-#define COARSENING_FACTOR 1  // Coarsening factor
+#define COARSENING_FACTOR 1 
 
 __global__ void kernel_nw3(unsigned char* sequence1, unsigned char* sequence2, int* scores_d, unsigned int numSequences)
 {
